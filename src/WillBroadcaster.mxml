@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Application xmlns:fx="http://ns.adobe.com/mxml/2009" 
+			   xmlns:s="library://ns.adobe.com/flex/spark" 
+			   xmlns:mx="library://ns.adobe.com/flex/mx"
+			   width="100%"
+			   height="100%"
+			   creationComplete="onCreation(event)">
+	<fx:Script>
+		<![CDATA[
+			import com.will.engine.Engine;
+			import com.will.model.Model;
+			import com.will.modules.VideoAndAudio;
+			
+			import flash.utils.setTimeout;
+			
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.graphics.ImageSnapshot;
+			import mx.graphics.codec.JPEGEncoder;
+			[Embed(source="assets/camback.png")]
+			[Bindable]private var camback:Class;
+			public function onCreation(event:FlexEvent):void
+			{
+				// TODO Auto-generated method stub
+				Model.rtmp_url      =  this.parameters.rtmp;
+				Model.publishName   =  this.parameters.publishname;
+				Model.userId        =  this.parameters.userId;
+				Model.mode          =  this.parameters.mode;
+				
+				
+				Model.BANDWIDTH          =  Number(this.parameters.bw);
+				Model.QUALITY            =  Number(this.parameters.ql);
+				Model.FPS                =  Number(this.parameters.fps);
+				Model.KEY_FRAME          =  Number(this.parameters.keyf);
+				
+				Model.UPDATE_TIME        =  Number(this.parameters.ut);
+				if(Model.mode== '0'){
+					Engine.getInstance().connect();
+				}else{
+					this.addElement(new VideoAndAudio());
+				}
+				
+				
+			}
+			public function addVideo():void
+			{
+				if(Model.video!=null)
+				{
+					if(_videocomp.numChildren>0)
+					{
+						_videocomp.removeChildAt(0);
+					}
+					_videocomp.addChild(Model.video);
+				}
+			}
+			
+			protected function onVideoComCreation(event:FlexEvent):void
+			{
+				// TODO Auto-generated method stub
+				Model.CAM_HIGHT = _videocomp.height;
+				Model.CAM_WIDTH = _videocomp.width;
+				Model.VID_HIGHT = Model.CAM_HIGHT;
+				Model.VID_WIDTH = Model.CAM_WIDTH;
+			}
+			
+			public function showAlert(str:String):void{
+				Alert.show(str);
+			}
+			private var broadCastSnap:ImageSnapshot;
+			private var jpgenc:JPEGEncoder = new JPEGEncoder(60);
+			public function captureCurrentScreen():void
+			{
+				broadCastSnap = ImageSnapshot.captureImage(_videocomp, 0, jpgenc);
+				var encodedString:String = ImageSnapshot.encodeImageAsBase64(broadCastSnap);
+				ExternalInterface.call("onBase64Image",encodedString);
+				setTimeout(captureCurrentScreen,Model.UPDATE_TIME);
+			}
+			
+			protected function camb_creationCompleteHandler(event:FlexEvent):void
+			{
+				// TODO Auto-generated method stub
+				setTimeout(function del():void{
+					if(Model.mode != '1'){
+						camb.visible = true;
+                        if(Model.publishName == 'mp4:0.f4v'){
+							publicroom.visible = true;
+							camb.visible = false;
+						}
+					}	
+				},500);
+				
+			}
+			public function removeCam():void{
+				if(_videocomp.numChildren > 0){
+					_videocomp.removeChildAt(0);
+					camOfflineLabel.visible = true;
+					camb.visible = false;
+				}
+			}
+		]]>
+	</fx:Script>
+	
+<s:VGroup width="100%"
+		  height="100%"
+		  gap="0">
+	<s:Group width="100%" 
+			 height="100%">
+		<s:Rect width="100%" height="100%">
+			<s:fill>
+				<s:SolidColor color="#2a2a2a"/>
+			</s:fill>
+		</s:Rect>
+		<s:Image width="100%"
+				 height="100%"
+				 source="{camback}"
+				 visible="false"
+				 id="camb"
+				 creationComplete="camb_creationCompleteHandler(event)"/>
+		<s:Label width="100%" height="100%"
+				 fontSize="18" verticalAlign="middle" textAlign="center"
+				 color="#ffffff" text="Cam Offline, Try another broadcaster"
+				 visible="false" id="camOfflineLabel"
+				 fontWeight="bold"/>
+		<s:Label width="100%" height="100%"
+				 fontSize="18" verticalAlign="middle" textAlign="center"
+				 color="#ffffff" text="This is a public room,Currently no broadcasters publishing their cam.You can chat to all users in this public room.You will redirect when broadcsters start cam.. Thanks,"
+				 visible="false" id="publicroom"
+				 fontWeight="bold"/>
+		<mx:UIComponent id="_videocomp"
+						width="100%" 
+						height="100%"
+						creationComplete="onVideoComCreation(event)"/>
+	</s:Group>
+	<s:Group width="100%"
+			 height="0"/>
+</s:VGroup>
+	
+</s:Application>

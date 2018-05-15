@@ -1,0 +1,468 @@
+<?xml version="1.0" encoding="utf-8"?>
+<s:Group xmlns:fx="http://ns.adobe.com/mxml/2009" 
+		 xmlns:s="library://ns.adobe.com/flex/spark" 
+		 xmlns:mx="library://ns.adobe.com/flex/mx" width="100%" height="100%" xmlns:metadata="org.osmf.metadata.*" creationComplete="group1_creationCompleteHandler(event)">
+	<fx:Metadata>
+		[Event(name="STARTPUBLISHING", type="flash.events.Event")]
+	</fx:Metadata>
+	<fx:Declarations>
+		<s:DropShadowFilter id="drop_Shadow" alpha="0.5" blurX="5" blurY="5" distance="0"
+							quality="100"/>
+		<s:ArrayCollection id="bandWidth">
+			
+		</s:ArrayCollection>
+	</fx:Declarations>
+	<fx:Script>
+		<![CDATA[
+			import com.will.event.EventClass;
+			import com.will.model.Model;
+			
+			import mx.collections.ArrayCollection;
+			import mx.controls.Alert;
+			import mx.core.FlexGlobals;
+			import mx.events.FlexEvent;
+			import mx.utils.ObjectUtil;
+			
+			import spark.events.IndexChangeEvent;
+			
+			[Embed(source="assets/bck.jpg")]
+			[Bindable]private var _bckClass:Class;
+			
+			[Embed(source="assets/mask.png")]
+			[Bindable]private var _mask:Class;
+			
+			[Bindable]public var yData:Number=10;
+			private var mic:Microphone=null;
+			private var myTimer:Timer=null;
+			
+			private var checkCount:Number=0;
+			private var micok:Boolean=false;
+			//for putting data to camera array
+			protected function btnClose(event:MouseEvent):void
+			{
+				onContinue();
+				
+				
+			}
+			public function onContinue():void
+			{
+				// TODO Auto-generated method stub
+				try
+				{
+					
+					myTimer.stop();
+					myTimer=null;
+					mic.setLoopBack(false);
+					mic=null;
+					dispose();
+					
+				} 
+				catch(error:Error) 
+				{
+					
+				} 
+				this.visible=false;
+				EventClass.getInstance().onContinue();
+			}
+			protected function AudioList_changeHandler(event:IndexChangeEvent):void
+			{
+				// TODO Auto-generated method stub
+				try
+				{
+					Model.MIC_INDEX=AudioList.selectedIndex;
+					accessMic();
+				} 
+				catch(error:Error) 
+				{
+					//					Alert.show("VideoAudioSettingsComponent -> AudioList_changeHandler ->"+error.message);
+				}
+			}
+			
+			protected function cameraList_changeHandler(event:IndexChangeEvent):void
+			{
+				// TODO Auto-generated method stub
+				try
+				{
+					Model.CAMERA_INDEX=cameraList.selectedIndex;
+					accessCam();
+				} 
+				catch(error:Error) 
+				{
+					//					Alert.show("VideoAudioSettingsComponent -> cameraList_changeHandler ->"+error.message);
+				}
+			}
+			public function dispose():void
+			{
+				if(videoDisplay.numChildren>0)
+				{
+					videoDisplay.removeChildAt(0);
+				}
+				vid=null;
+				myTimer = null;
+				mic = null;
+				_mask = null;
+				_bckClass = null;
+				cameraList.removeEventListener(IndexChangeEvent.CHANGE,cameraList_changeHandler);
+				AudioList.removeEventListener(IndexChangeEvent.CHANGE,AudioList_changeHandler);
+				bandWidthSelection.removeEventListener(IndexChangeEvent.CHANGE,bandWidthSelectionChange);
+				this.removeAllElements();
+			}
+			
+			private function putData():void
+			{
+				var obj:Object;
+				var arr:ArrayCollection;
+				if(Model.cameraArray.length>0)
+				{
+					cameraList.dataProvider=Model.cameraArray;
+					cameraList.selectedIndex=Model.CAMERA_INDEX; 
+					cameraList.enabled=true;
+					
+				}
+				else
+				{
+					arr=new ArrayCollection();
+					obj=new Object();
+					obj["name"]="No Camera Detected";
+					arr.addItem(obj);
+					cameraList.dataProvider=arr;
+					cameraList.enabled=false;
+					
+				}
+				if(Model.microPhoneArray.length>0)
+				{
+					AudioList.dataProvider=Model.microPhoneArray;
+					AudioList.selectedIndex=Model.MIC_INDEX; 
+					AudioList.enabled=true;
+					
+				}
+				else
+				{
+					arr=new ArrayCollection();
+					obj=new Object();
+					obj["name"]="No MicroPhone Detected";
+					arr.addItem(obj);
+					AudioList.dataProvider=arr;
+					AudioList.enabled=false;
+					
+				}
+				
+				if(Camera.getCamera()==null && Microphone.getMicrophone() == null)
+				{
+					FlexGlobals.topLevelApplication.showAlert("No camera and microphone attached, Please connect a camera and try again");
+					okButton.enabled = false;
+					return; 
+				}
+				else if(Camera.getCamera()==null)
+				{
+					FlexGlobals.topLevelApplication.showAlert("No camera attached, Please connect a camera and try again");
+					okButton.enabled = false;
+					return; 
+				}
+				else if(Camera.getCamera()==null)
+				{
+					FlexGlobals.topLevelApplication.showAlert("No microphone attached");
+					okButton.enabled = true;
+					return; 
+				}
+				else
+				{
+					okButton.enabled = true;
+					accessCam(); 
+					accessMic();
+				}
+				
+				obj=null;
+			}
+			//for getting data from camera array
+			public function getData():void
+			{
+				try
+				{
+					
+					var checkVal:int=0;
+					var obj:Object=null;
+					if(Camera.names.length>0)
+					{
+						
+						for(var i:int=0; i<Camera.names.length; i++)
+						{	
+							obj=new Object();
+							obj["name"]=Camera.names[i] as String;
+							Model.cameraArray.addItem(obj);
+							obj=null;
+						}
+						
+					}
+					
+					if(Microphone.names.length>0)
+					{
+						
+						for(var j:int=0; j<Microphone.names.length; j++)
+						{	
+							var obj2:Object=new Object();
+							obj2["name"]=Microphone.names[j] as String;
+							Model.microPhoneArray.addItem(obj2);
+							obj2=null;
+						}
+					}
+				} 
+				catch(error:Error) 
+				{
+					
+				}
+				
+				putData();
+			}
+			//for apply camera settings
+			private var vid:Video=null;
+			public function accessCam():void
+			{
+				
+				var cam:Camera = Camera.getCamera(Model.CAMERA_INDEX.toString());
+				if(cam)
+				{
+					cam.setMode(videoDisplay.width,videoDisplay.height,cam.fps);
+					cam.setQuality(0,80);
+					cam.setKeyFrameInterval(Math.round(cam.fps));
+					vid=null;
+					vid=new Video(videoDisplay.width,videoDisplay.height);
+					vid.attachCamera(cam);
+					if(videoDisplay.numChildren>0)
+					{
+						videoDisplay.removeChildAt(0);
+					}
+					videoDisplay.addChild(vid);
+					cam.addEventListener(StatusEvent.STATUS, function onStatus(event:StatusEvent):void
+					{
+						
+						
+					});
+				}
+				
+				
+				
+			}
+			//to applay mic setttings
+			public function accessMic():void
+			{
+				
+				mic = Microphone.getMicrophone(Model.MIC_INDEX);
+				if(mic!=null)
+				{
+					yData=mic.activityLevel;								
+					mic.setLoopBack(true);
+					mic.setUseEchoSuppression(true);
+					mic.gain=80;
+					mic.rate=22; 
+					var soundTran:SoundTransform=new SoundTransform(0);
+					mic.soundTransform=soundTran;
+					mic.setSilenceLevel(5,1000); 
+					if(myTimer)
+					{
+						if(myTimer.running)
+						{
+							myTimer.stop();
+						}
+						
+						myTimer=null;
+					}
+					myTimer = new Timer(50);
+					// add a event handler for the timer
+					myTimer.addEventListener(TimerEvent.TIMER,function onTimer(event:TimerEvent):void
+					{
+						yData=mic.activityLevel;
+						
+					});
+					myTimer.start(); 
+					
+				}
+				
+			}
+			
+			
+			
+			
+			
+			protected function bandWidthSelectionChange(event:IndexChangeEvent):void
+			{
+				// TODO Auto-generated method stub
+				var obj : Object = bandWidthSelection.selectedItem;
+				Model.BANDWIDTH = obj.bandwidth;
+				Model.FPS       = obj.fps;
+				Model.QUALITY   = obj.quality;
+				Model.KEY_FRAME = obj.keyFrame;
+				//Alert.show(Model.QUALITY.toString());
+				
+			}
+			//execute on creation compleate
+			protected function group1_creationCompleteHandler(event:FlexEvent):void
+			{
+				var obj:Object = new Object();
+				obj.name = "Very High Bandwidth";
+				obj.resolutions = "500x375";
+				obj.videobitrate = "512";
+				obj.quality = "100";
+				obj.fps = "60";
+				obj.bandwidth = "50000";
+				obj.keyFrame = "10";
+				bandWidth.addItem(obj);
+				
+				obj = new Object();
+				obj.name = "High Bandwidth";
+				obj.resolutions = "500x375";
+				obj.videobitrate = "512";
+				obj.quality = "95";
+				obj.fps = "30";
+				obj.bandwidth = "40000";
+				obj.keyFrame = "30";
+				bandWidth.addItem(obj);
+				
+				obj = new Object();
+				obj.name = "Normal Bandwidth";
+				obj.resolutions = "500x375";
+				obj.videobitrate = "256";
+				obj.quality = "90";
+				obj.fps = "30";
+				obj.bandwidth = "30000";
+				obj.keyFrame = "60";
+				bandWidth.addItem(obj);
+				
+				obj = new Object();
+				obj.name = "Low Bandwidth";
+				obj.resolutions = "500x375";
+				obj.videobitrate = "128";
+				obj.quality = "80";
+				obj.fps = "15";
+				obj.bandwidth = "20000";
+				obj.keyFrame = "60";
+				bandWidth.addItem(obj);
+				
+				obj = new Object();
+				obj.name = "Very Low Bandwidth";
+				obj.resolutions = "500x375";
+				obj.videobitrate = "64";
+				obj.quality = "70";
+				obj.fps = "10";
+				obj.bandwidth = "10000";
+				obj.keyFrame = "90";
+				bandWidth.addItem(obj);
+				bandWidthSelection.selectedIndex = 2;
+				this.getData();
+				
+			}
+			
+		]]>
+	</fx:Script>
+	<fx:Declarations>
+		<!-- Place non-visual elements (e.g., services, value objects) here -->
+	</fx:Declarations>
+	<s:Group width="100%" height="100%">
+		<s:Rect width="100%" height="100%">
+			<s:fill>
+				<s:SolidColor color="0xffffff" alpha=".3"/>
+			</s:fill>
+		</s:Rect>
+		<s:BorderContainer verticalCenter="0" horizontalCenter="0" width="500" height="297"
+						   borderColor="{Model.APP_BORDER_COLOR}" borderVisible="true" contentBackgroundColor="{Model.APP_BG_COLOR}"
+						   cornerRadius="3" filters="{[drop_Shadow]}">
+			<s:backgroundFill>
+				<s:LinearGradient rotation="90">
+					<s:GradientEntry color="{Model.APP_BG_COLOR}"/>
+				</s:LinearGradient>
+			</s:backgroundFill>			
+			<s:Image source="@Embed('assets/settings.png')" horizontalCenter="0" top="10"/>			
+			<s:Group x="306" top="70" bottom="11" width="187">
+				<s:Label y="136" left="2" width="180" color="#000000" fontSize="15"
+						 fontWeight="normal" text="Bandwidth Selection" textAlign="left"
+						 verticalAlign="middle" visible="true"/>
+				<s:DropDownList id="bandWidthSelection" x="0" y="155" width="180" height="25"
+								change="bandWidthSelectionChange(event)"
+								contentBackgroundColor="0x54575c" cornerRadius="1"
+								dataProvider="{bandWidth}" fontSize="11" fontWeight="normal"
+								itemRenderer="com.will.render.DDLRender" labelField="name"
+								requireSelection="true" skinClass="com.will.skinz.dropDownSkin"  visible="true"
+								/>
+				
+				
+				<s:Label id="audioLabel" x="2" y="57" width="180" color="#000000" fontSize="15"
+						 fontWeight="normal" text="Audio List" textAlign="left"
+						 verticalAlign="middle"/>
+				<s:DropDownList id="AudioList" x="0" y="76" width="180" height="25"
+								change="AudioList_changeHandler(event)"
+								color="0x2a2a2a"
+								selectionColor="{Model.APP_BORDER_COLOR}"
+								contentBackgroundColor="#ffffff" cornerRadius="1" fontSize="11"
+								fontWeight="normal" itemRenderer="com.will.render.DDLRender"
+								labelField="name" requireSelection="true"
+								skinClass="com.will.skinz.dropDownSkin"
+								horizontalScrollPolicy="off"
+								buttonMode="true"/>
+				
+				
+				
+				<s:BorderContainer x="0" y="107" width="180" height="14" backgroundAlpha="0" borderVisible="false"
+								   scrollRect="{new Rectangle(0,0,180,14)}">
+					<s:Group  x="0" y="0" width="100%" height="100%" id="mas">
+						<s:Rect top="0" bottom="0"  width="{yData*1.8}">
+							<s:fill>
+								<!--<s:SolidColor color="0x38444D"/>-->
+								<s:LinearGradient  >
+									<s:GradientEntry color="0x4cB848"/>
+									<s:GradientEntry color="0xF8D109"/>
+									<s:GradientEntry color="0xFF0000"/>
+									
+								</s:LinearGradient>
+							</s:fill>
+						</s:Rect>
+					</s:Group>
+					<s:Image source="{_mask}" width="180" mask="{mas}"/>
+				</s:BorderContainer>
+				
+				
+				
+				
+				<s:Label x="2" y="2" width="180" color="#000000" fontSize="15" fontWeight="normal"
+						 text="Camera List" textAlign="left" verticalAlign="middle"/>
+				<s:DropDownList id="cameraList" y="18" width="180" height="25" borderVisible="true"
+								change="cameraList_changeHandler(event)"
+								contentBackgroundColor="#ffffff" cornerRadius="1"
+								dropShadowVisible="true" fontSize="11" fontWeight="normal"
+								itemRenderer="com.will.render.DDLRender" labelField="name"
+								requireSelection="true" skinClass="com.will.skinz.dropDownSkin"
+								selectionColor="{Model.APP_BORDER_COLOR}"
+								horizontalScrollPolicy="off"
+								color="0x2a2a2a"
+								buttonMode="true"/>
+				<!--<s:Button id="okButton" bottom="0" width="79" height="28" label="Ok" click="btnClose(event)"
+				cornerRadius="2" fontWeight="bold" skinClass="com.enfin.skinz.RegisterButtonSkin"
+				buttonMode="true"/>-->
+				<s:Button id="okButton"  bottom="0" width="100" height="30" label="Continue"
+						  click="btnClose(event)" color="0x4a4a4a" cornerRadius="5"
+						  fontFamily="Arial" fontSize="17" icon="assets/continue.png" iconPlacement="right"
+						  skinClass="com.will.skinz.CommonButtonSkin"
+						  enabled="true" buttonMode="true"/>
+			</s:Group>
+			
+			<s:Group left="10" top="70" bottom="11" width="288">
+				<s:Rect width="100%" height="100%">
+					<s:fill>
+						<s:SolidColor color="0x000000"/>
+					</s:fill>
+				</s:Rect>
+				<mx:UIComponent id="videoDisplay" left="0" width="100%" height="100%"
+								verticalCenter="0"/>
+			</s:Group>
+			<s:Group id="_miccheck" width="100%" height="100%" visible="false">
+				<s:Rect width="100%" height="100%">
+					<s:fill>
+						<s:SolidColor color="0x000000" alpha=".2"/>
+					</s:fill>
+				</s:Rect>
+				<s:Label verticalCenter="0" horizontalCenter="0" text="Checking Microphone..." color="0xffffff"/>
+			</s:Group>
+		</s:BorderContainer>
+	</s:Group>
+	
+	
+</s:Group>
